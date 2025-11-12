@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Brain, Clock, Play, Pause, RotateCcw, Activity, User, Zap, Sparkles, TrendingUp, Target, Coffee, Moon, Dumbbell, Monitor } from 'lucide-react';
+import { Brain, Clock, Play, Pause, RotateCcw, Activity, User, Zap, Sparkles, TrendingUp, Target, Coffee, Moon, Dumbbell, Monitor, Volume2, VolumeX, Volume1 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -20,6 +20,8 @@ const BrainwaveFocusSystem = () => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [concentrationBreaks, setConcentrationBreaks] = useState(0);
   const [alphaWavePlaying, setAlphaWavePlaying] = useState(false);
+  const [volume, setVolume] = useState(0.5); // Default 50% volume
+  const [showVolumeControl, setShowVolumeControl] = useState(false);
   
   const audioContextRef = useRef(null);
   const oscillatorRef = useRef(null);
@@ -39,8 +41,51 @@ const BrainwaveFocusSystem = () => {
     };
   }, [sessionActive, isPaused]);
 
+  // Update volume in real-time if audio is playing
+  useEffect(() => {
+    if (gainNodeRef.current && alphaWavePlaying) {
+      gainNodeRef.current.gain.setValueAtTime(volume, audioContextRef.current.currentTime);
+    }
+  }, [volume, alphaWavePlaying]);
+
   const handleInputChange = (field, value) => {
     setUserData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const initializeAudio = () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      console.log('✅ Audio context initialized');
+    } catch (error) {
+      console.error('❌ Audio initialization failed:', error);
+    }
+  };
+
+  const testAudio = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.frequency.value = 440;
+      gain.gain.value = volume;
+      
+      osc.start();
+      setTimeout(() => osc.stop(), 1000);
+      
+      console.log('✅ Test audio played');
+    } catch (error) {
+      console.error('❌ Test audio failed:', error);
+      alert('Audio is blocked by your browser. Please check settings.');
+    }
   };
 
   const analyzeUser = async () => {
@@ -77,35 +122,81 @@ const BrainwaveFocusSystem = () => {
   };
 
   const startAlphaWave = (frequency = 10) => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      const ctx = audioContextRef.current;
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          console.log('✅ Audio context resumed');
+        });
+      }
+      
+      if (oscillatorRef.current) {
+        try {
+          oscillatorRef.current.stop();
+          oscillatorRef.current.disconnect();
+        } catch (e) {
+          // Already stopped
+        }
+      }
+      
+      oscillatorRef.current = ctx.createOscillator();
+      gainNodeRef.current = ctx.createGain();
+      
+      oscillatorRef.current.type = 'sine';
+      oscillatorRef.current.frequency.setValueAtTime(frequency, ctx.currentTime);
+      
+      gainNodeRef.current.gain.setValueAtTime(0, ctx.currentTime);
+      
+      oscillatorRef.current.connect(gainNodeRef.current);
+      gainNodeRef.current.connect(ctx.destination);
+      
+      oscillatorRef.current.start(ctx.currentTime);
+      
+      // Fade in
+      gainNodeRef.current.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.5);
+      
+      setAlphaWavePlaying(true);
+      
+      console.log(`✅ Alpha wave playing at ${frequency} Hz with ${Math.round(volume * 100)}% volume`);
+      
+    } catch (error) {
+      console.error('❌ Error starting alpha wave:', error);
+      alert('Unable to play audio. Please:\n1. Click anywhere on the page first\n2. Check your browser allows sound\n3. Unmute the browser tab');
     }
-    
-    const ctx = audioContextRef.current;
-    if (oscillatorRef.current) oscillatorRef.current.stop();
-    
-    oscillatorRef.current = ctx.createOscillator();
-    gainNodeRef.current = ctx.createGain();
-    
-    oscillatorRef.current.type = 'sine';
-    oscillatorRef.current.frequency.setValueAtTime(frequency, ctx.currentTime);
-    gainNodeRef.current.gain.setValueAtTime(0.1, ctx.currentTime);
-    
-    oscillatorRef.current.connect(gainNodeRef.current);
-    gainNodeRef.current.connect(ctx.destination);
-    oscillatorRef.current.start();
-    setAlphaWavePlaying(true);
   };
 
   const stopAlphaWave = () => {
-    if (oscillatorRef.current) {
-      oscillatorRef.current.stop();
-      oscillatorRef.current = null;
+    try {
+      if (oscillatorRef.current && audioContextRef.current) {
+        const ctx = audioContextRef.current;
+        
+        if (gainNodeRef.current) {
+          gainNodeRef.current.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+        }
+        
+        setTimeout(() => {
+          if (oscillatorRef.current) {
+            oscillatorRef.current.stop();
+            oscillatorRef.current.disconnect();
+            oscillatorRef.current = null;
+          }
+        }, 300);
+        
+        console.log('✅ Alpha wave stopped');
+      }
+      setAlphaWavePlaying(false);
+    } catch (error) {
+      console.error('❌ Error stopping alpha wave:', error);
     }
-    setAlphaWavePlaying(false);
   };
 
   const startSession = () => {
+    initializeAudio();
     setSessionActive(true);
     setElapsedTime(0);
     setConcentrationBreaks(0);
@@ -135,6 +226,12 @@ const BrainwaveFocusSystem = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getVolumeIcon = () => {
+    if (volume === 0) return <VolumeX className="w-6 h-6" />;
+    if (volume < 0.5) return <Volume1 className="w-6 h-6" />;
+    return <Volume2 className="w-6 h-6" />;
   };
 
   if (step === 'welcome') {
@@ -179,6 +276,15 @@ const BrainwaveFocusSystem = () => {
                 <p className="text-white text-sm font-semibold">Alpha Waves</p>
               </div>
             </div>
+
+            {/* Test Audio Button */}
+            <button
+              onClick={testAudio}
+              className="w-full mb-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white py-3 rounded-2xl font-semibold hover:shadow-lg transform hover:scale-105 transition duration-200 flex items-center justify-center"
+            >
+              <Volume2 className="w-5 h-5 mr-2" />
+              🔊 Test Audio (Click First!)
+            </button>
 
             <button
               onClick={() => setStep('questionnaire')}
@@ -366,13 +472,56 @@ const BrainwaveFocusSystem = () => {
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-blue-200 to-indigo-200 rounded-full filter blur-3xl opacity-20"></div>
 
             <div className="relative z-10">
-              <div className="flex items-center mb-8">
-                <Activity className="w-10 h-10 text-purple-600 mr-3 animate-pulse" />
-                <div>
-                  <h2 className="text-4xl font-bold text-gray-800">Your Focus Profile</h2>
-                  <p className="text-gray-600">Personalized insights based on your lifestyle</p>
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center">
+                  <Activity className="w-10 h-10 text-purple-600 mr-3 animate-pulse" />
+                  <div>
+                    <h2 className="text-4xl font-bold text-gray-800">Your Focus Profile</h2>
+                    <p className="text-gray-600">Personalized insights based on your lifestyle</p>
+                  </div>
                 </div>
+
+                {/* Volume Control Button */}
+                <button
+                  onClick={() => setShowVolumeControl(!showVolumeControl)}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white p-3 rounded-xl hover:shadow-lg transition"
+                  title="Volume Control"
+                >
+                  {getVolumeIcon()}
+                </button>
               </div>
+
+              {/* Volume Control Slider */}
+              {showVolumeControl && (
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-6 rounded-2xl mb-6 border-2 border-purple-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-bold text-gray-700 flex items-center">
+                      {getVolumeIcon()}
+                      <span className="ml-2">Alpha Wave Volume</span>
+                    </label>
+                    <span className="text-2xl font-bold text-purple-600">{Math.round(volume * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={volume}
+                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                    className="w-full h-3 bg-gradient-to-r from-purple-400 to-indigo-600 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-600 mt-2">
+                    <span>🔇 Silent</span>
+                    <span>🔊 Loud</span>
+                  </div>
+                  <button
+                    onClick={testAudio}
+                    className="w-full mt-3 bg-yellow-500 text-white py-2 rounded-xl font-semibold hover:bg-yellow-600 transition"
+                  >
+                    Test Current Volume
+                  </button>
+                </div>
+              )}
 
               <div className="grid md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-6 rounded-2xl text-white transform hover:scale-105 transition duration-300 shadow-xl">
@@ -467,11 +616,17 @@ const BrainwaveFocusSystem = () => {
 
                   {alphaWavePlaying && (
                     <div className="bg-gradient-to-r from-yellow-400 to-orange-400 p-6 rounded-2xl shadow-xl animate-pulse">
-                      <div className="flex items-center text-gray-900">
-                        <Zap className="w-8 h-8 mr-3 animate-bounce" />
-                        <div>
-                          <p className="font-bold text-lg">Alpha Wave Therapy Active</p>
-                          <p className="text-sm opacity-75">Focus on your breath and let distractions fade away</p>
+                      <div className="flex items-center justify-between text-gray-900">
+                        <div className="flex items-center flex-1">
+                          <Zap className="w-8 h-8 mr-3 animate-bounce" />
+                          <div>
+                            <p className="font-bold text-lg">Alpha Wave Therapy Active</p>
+                            <p className="text-sm opacity-75">Focus on your breath and let distractions fade away</p>
+                          </div>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-2xl font-bold">{Math.round(volume * 100)}%</div>
+                          <div className="text-xs opacity-75">Volume</div>
                         </div>
                       </div>
                     </div>
@@ -525,4 +680,3 @@ const BrainwaveFocusSystem = () => {
 };
 
 export default BrainwaveFocusSystem;
-
