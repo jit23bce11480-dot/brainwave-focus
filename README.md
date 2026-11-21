@@ -2,7 +2,7 @@
 
 A full-stack web app that estimates how long you can focus from a short lifestyle questionnaire, then runs a focus timer with a binaural tone for when your attention drifts.
 
-- **Frontend:** React 18 (Create React App), Tailwind CSS, lucide-react icons, Web Audio API
+- **Frontend:** React 18 (Create React App), hand-written CSS design system, HTML canvas animation, lucide-react icons, Web Audio API
 - **Backend:** Node.js, Express REST API, JSON file storage
 - **Tests:** Jest + Supertest (backend)
 

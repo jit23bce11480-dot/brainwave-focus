@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import Welcome from './components/Welcome';
+import React, { useCallback, useEffect, useState } from 'react';
+import Landing from './components/Landing';
 import Questionnaire from './components/Questionnaire';
 import Results from './components/Results';
+import WaveField from './components/WaveField';
+import Cursor from './components/Cursor';
 import useBinauralBeat from './hooks/useBinauralBeat';
 import { analyzeProfile } from './api';
 import { calculateBrainwaveProfile, generateRecommendations } from './brainwaveProfile';
@@ -43,7 +45,16 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]);
   const [volume, setVolume] = useState(0.5);
+  const [sessionActive, setSessionActive] = useState(false);
   const audio = useBinauralBeat(volume);
+
+  // The background reacts to what you're doing.
+  const waveMode = audio.playing ? 'tone' : sessionActive ? 'focus' : 'idle';
+
+  // Each new screen starts at the top of the page.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step]);
 
   const handleInputChange = (field, value) => {
     setUserData((prev) => ({ ...prev, [field]: value }));
@@ -83,24 +94,26 @@ export default function App() {
     setStep('welcome');
   };
 
-  if (step === 'welcome') {
-    return <Welcome onStart={() => setStep('questionnaire')} onTestAudio={() => audio.test(10)} />;
-  }
+  // useCallback keeps this function the same between renders, so FocusSession's effect
+  // (which lists it as a dependency) doesn't re-run for no reason.
+  const handleSessionActiveChange = useCallback((active) => setSessionActive(active), []);
 
-  if (step === 'questionnaire') {
-    return (
+  let screen = null;
+  if (step === 'welcome') {
+    screen = <Landing onStart={() => setStep('questionnaire')} onTestAudio={() => audio.test(10)} />;
+  } else if (step === 'questionnaire') {
+    screen = (
       <Questionnaire
         userData={userData}
         onChange={handleInputChange}
         onSubmit={analyzeUser}
+        onBack={() => setStep('welcome')}
         submitting={submitting}
         errors={errors}
       />
     );
-  }
-
-  if (step === 'results' && analysis) {
-    return (
+  } else if (step === 'results' && analysis) {
+    screen = (
       <Results
         analysis={analysis}
         recommendations={recommendations}
@@ -110,9 +123,20 @@ export default function App() {
         volume={volume}
         onVolumeChange={setVolume}
         onNewAnalysis={startNewAnalysis}
+        onSessionActiveChange={handleSessionActiveChange}
       />
     );
   }
 
-  return null;
+  return (
+    <>
+      <WaveField mode={waveMode} />
+      {/* key={step} gives each screen a fresh start, so its entrance animation plays */}
+      <div className={`app ${sessionActive ? 'is-behind' : ''}`} key={step}>
+        {screen}
+      </div>
+      <div className="grain" aria-hidden="true" />
+      <Cursor />
+    </>
+  );
 }
