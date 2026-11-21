@@ -1,4 +1,4 @@
-@import url('https://cdn.jsdelivr.net/npm/tailwindcss@3.3.0/dist/tailwind.min.css');
+/* Tailwind is loaded by a <script> in public/index.html. */
 
 * {
   margin: 0;
